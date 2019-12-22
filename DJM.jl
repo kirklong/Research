@@ -15,5 +15,6 @@ include("Swift.jl")
 #KIRK ADDED
 include("Probability.jl")
 include("MatrixGen.jl")
+include("bootstrap.jl")
 
 end
