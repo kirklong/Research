@@ -35,9 +35,9 @@ function makeLC(indList; binNum=11,srcinfo="",shifted=false,norm=false) #pick od
     end
     if shifted==false
         if norm==false
-            p=plot(bins,label="",title="LC for $srcinfo")
+            p=plot(bins,label="",title="LC for $srcinfo \nCOUNTS: $(sum(bins))",yerr=sqrt.(bins))
         else
-            p=plot(bins./sum(bins),label="",title="Normalized LC for $srcinfo")
+            p=plot(bins./sum(bins),label="",title="Normalized LC for $srcinfo \nCOUNTS: $(sum(bins))",yerr=sqrt.(bins)./sum(bins))
         end
     else
         half=Int((length(bins)+1)/2) #assuming odd bin num
@@ -53,9 +53,9 @@ function makeLC(indList; binNum=11,srcinfo="",shifted=false,norm=false) #pick od
                 end
             end
             if norm==false
-                p=plot(binShift,label="",title="Shifted LC for $srcinfo")
+                p=plot(binShift,label="",title="Shifted LC for $srcinfo \nCOUNTS: $(sum(binShift))",yerr=sqrt.(binShift))
             else
-                p=plot(binShift./sum(binShift),label="",title="Normalized shifted LC for $srcinfo")
+                p=plot(binShift./sum(binShift),label="",title="Normalized shifted LC for $srcinfo \nCOUNTS: $(sum(binShift))",yerr=sqrt.(binShift)./sum(binShift))
             end
         elseif maxInd<half #need to move things "forwards"
             for i=1:length(binShift)
@@ -66,15 +66,15 @@ function makeLC(indList; binNum=11,srcinfo="",shifted=false,norm=false) #pick od
                 end
             end
             if norm==false
-                p=plot(binShift,label="",title="Shifted LC for $srcinfo")
+                p=plot(binShift,label="",title="Shifted LC for $srcinfo \nCOUNTS: $(sum(binShift))",yerr=sqrt.(binShift))
             else
-                p=plot(binShift./sum(binShift),label="",title="Normalized shifted LC for $srcinfo")
+                p=plot(binShift./sum(binShift),label="",title="Normalized shifted LC for $srcinfo \nCOUNTS: $(sum(binShift))",yerr=sqrt.(binShift)./sum(binShift))
             end
         else
             if norm==false
-                p=plot(bins,label="",title="Shifted LC for $srcinfo")
+                p=plot(bins,label="",title="Shifted LC for $srcinfo \nCOUNTS: $(sum(bins))",yerr=sqrt.(bins))
             else
-                p=plot(bins./sum(bins),label="",title="Normalized shifted LC for $srcinfo")
+                p=plot(bins./sum(bins),label="",title="Normalized shifted LC for $srcinfo \nCOUNTS: $(sum(bins))",yerr=sqrt.(bins)./sum(bins))
             end
         end
     return p
@@ -154,10 +154,35 @@ function makeLCPair(indList1,indList2; binNum=11,srcinfo1="",srcinfo2="") #pick 
     end
 
     shift1,shift2=shiftBins(maxInd1,half,delta1,bins1),shiftBins(maxInd2,half,delta2,bins2)
+    yerr1,yerr2=sqrt.(shift1),sqrt.(shift2)
     norm1,norm2=shift1./sum(shift1),shift2./sum(shift2)
-    p=plot(norm1,label="$srcinfo1")
-    p=plot!(norm2,label="$srcinfo2")
-    p=plot!(title="Shifted and normalized LC pair")
+    p=plot(norm1,label="$srcinfo1 COUNTS: $(sum(shift1))",ribbon=yerr1./sum(shift1),fillalpha=0.5)#yerr=yerr1./sum(shift1))
+    p=plot!(norm2,label="$srcinfo2 COUNTS: $(sum(shift2))",ribbon=yerr2./sum(shift2),fillalpha=0.5)#yerr=yerr2./sum(shift2))
+    function genAnnotations(binShift,left;kwargs...)
+        annotations=[]
+        if left==true #for some reason could not get this to work in kwargs...
+            for i=1:length(binShift)
+                push!(annotations,(i,binShift[i]/sum(binShift),Plots.text("$(binShift[i])",8,:left;kwargs...)))
+            end
+        else
+            for i=1:length(binShift)
+                push!(annotations,(i,binShift[i]/sum(binShift),Plots.text("$(binShift[i])",8,:right;kwargs...)))
+            end
+        end
+        return annotations
+    end
+    a1,a2=genAnnotations(shift1,true;color=:blue),genAnnotations(shift2,false;color=:red)
+    for i=1:length(a1)
+        p=annotate!(a1[i][1],a1[i][2],a1[i][3]) #add annotations to data points
+        p=annotate!(a2[i][1],a2[i][2],a2[i][3])
+    end
+    yMax1,yMax2=maximum(norm1),maximum(norm2)
+    if yMax1>yMax2
+        pMax=yMax1
+    else
+        pMax=yMax2
+    end
+    p=plot!(title="Shifted and normalized LC pair",legend=:best,ylims=(0,pMax+0.08)) #manually set ylim so legend clears data
     return p
 end
 
@@ -187,5 +212,8 @@ function genPairLC(; fileListPath="obsid_src_test.txt") #need to both shift and 
     end
 end
 
+#genAllLC()
 #genAllLC(normalized=true)
-genPairLC()
+#genAllLC(shiftedVar=true)
+#genAllLC(shiftedVar=true,normalized=true)
+#genPairLC()
