@@ -19,10 +19,12 @@ function rescaleTimes(times)
     return rescaledTimes
 end
 
-function getInd(rescaledTimes)
+function getInd(rescaledTimes,T; binNum=11) #T=period of source
     indList=zeros(length(rescaledTimes))
     for i=1:length(indList)
-        indList[i]=floor(rescaledTimes[i]%10)+1
+        mod=rescaledTimes[i]%T #value between 0 and T
+        ind=floor(binNum*mod/T)+1 #ie if T is 110 and we want 11 bins and mod value was 9 the index is floor(11*9/110)+1=1
+        indList[i]=ind
     end
     return indList
 end
@@ -84,18 +86,20 @@ end
 function genAllLC(; fileListPath="obsid_src_test.txt",shiftedVar=false,normalized=false)
     #println("got here")
     srcs=CSV.read(fileListPath,header=false) #read in from txt file generated elsewhere
-    obsid=srcs.Column1[:]
-    srcNum=srcs.Column2[:]
+    obsid=Int.(srcs.Column1[:])
+    srcNum=Int.(srcs.Column2[:])
+    srcT=srcs.Column3[:]
     for i=1:length(obsid)
         print(i/length(obsid)*100," % complete\r")
         currentObsid=obsid[i]
         currentSrcNum=srcNum[i]
+        currentT=srcT[i]
         srcinfoString="OBSID: $(currentObsid) SRC: $(currentSrcNum)"
         filePath="$(currentObsid)_src_$(currentSrcNum).times" #assume run from directory with files
         data=readlines(filePath)
         times=getFloatTimes(data)
         rescaledTimes=rescaleTimes(times)
-        ind=getInd(rescaledTimes)
+        ind=getInd(rescaledTimes,currentT)
         lc=makeLC(ind;shifted=shiftedVar,srcinfo=srcinfoString,norm=normalized)
         if shiftedVar==false
             if normalized==false
@@ -189,14 +193,16 @@ end
 
 function genPairLC(; fileListPath="obsid_src_test.txt") #need to both shift and normalize for this to be relevant
     srcs=CSV.read(fileListPath,header=false) #read in from txt file generated elsewhere
-    obsid=srcs.Column1[:]
-    srcNum=srcs.Column2[:]
+    obsid=Int.(srcs.Column1[:])
+    srcNum=Int.(srcs.Column2[:])
+    srcT=srcs.Column3[:]
     for i=1:2:length(obsid)
         print(i/length(obsid)*100," % complete\r")
         obsid1=obsid[i]
         srcNum1=srcNum[i]
         obsid2=obsid[i+1]
         srcNum2=srcNum[i+1]
+        T1,T2=srcT[i],srcT[i+1]
         srcinfoString1="OBSID: $(obsid1) SRC: $(srcNum1)"
         srcinfoString2="OBSID: $(obsid2) SRC: $(srcNum2)"
         #filePath="pair$(i)_$(obsid1)_src_$(srcNum1)_w_$(obsid2)_src_$(srcNum2).times" #assume run from directory with files
@@ -205,15 +211,15 @@ function genPairLC(; fileListPath="obsid_src_test.txt") #need to both shift and 
         data1,data2=readlines(file1),readlines(file2)
         times1,times2=getFloatTimes(data1),getFloatTimes(data2)
         rescaledTimes1,rescaledTimes2=rescaleTimes(times1),rescaleTimes(times2)
-        ind1,ind2=getInd(rescaledTimes1),getInd(rescaledTimes2)
+        ind1,ind2=getInd(rescaledTimes1,T1),getInd(rescaledTimes2,T2)
         lc=makeLCPair(ind1,ind2;srcinfo1=srcinfoString1,srcinfo2=srcinfoString2)
         png(lc,"plots/pair_$(obsid1)_src_$(srcNum1)_w_$(obsid2)_src_$(srcNum2).png")
         closeall()
     end
 end
 
-#genAllLC()
-#genAllLC(normalized=true)
-#genAllLC(shiftedVar=true)
-#genAllLC(shiftedVar=true,normalized=true)
-#genPairLC()
+genAllLC()
+genAllLC(normalized=true)
+genAllLC(shiftedVar=true)
+genAllLC(shiftedVar=true,normalized=true)
+genPairLC()
