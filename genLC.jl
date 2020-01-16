@@ -1,5 +1,6 @@
 #!/usr/bin/env julia
-using Plots, CSV
+using Plots, CSV, HypothesisTests
+
 function getFloatTimes(dataList)
     timeList=zeros(length(dataList)-7) #-7 because 1st 7 are bs
     for i=8:length(dataList) #real data starts at 8
@@ -42,6 +43,7 @@ function makeLC(indList; binNum=11,srcinfo="",shifted=false,norm=false) #pick od
             p=plot(bins./sum(bins),label="",title="Normalized LC for $srcinfo \nCOUNTS: $(sum(bins))",yerr=sqrt.(bins)./sum(bins))
         end
     else
+        #this should be generalized with KS test at some point to accomadate shifting other than just to peak
         half=Int((length(bins)+1)/2) #assuming odd bin num
         binShift=zeros(length(bins))
         maxInd=findmax(bins)[2]
@@ -133,7 +135,7 @@ function makeLCPair(indList1,indList2; binNum=11,srcinfo1="",srcinfo2="") #pick 
     maxInd1,maxInd2=findmax(bins1)[2],findmax(bins2)[2]
     delta1,delta2=abs(maxInd1-half),abs(maxInd2-half)
 
-    function shiftBins(maxInd,half,delta,bins)
+    function shiftBinsMid(maxInd,half,delta,bins) #shifts bins so peak is midpoint
         binShift=zeros(length(bins))
         if maxInd>half #need to move things "backwards"
             for i=1:length(binShift)
@@ -157,11 +159,44 @@ function makeLCPair(indList1,indList2; binNum=11,srcinfo1="",srcinfo2="") #pick 
         return binShift
     end
 
-    shift1,shift2=shiftBins(maxInd1,half,delta1,bins1),shiftBins(maxInd2,half,delta2,bins2)
+    function cumulativeBins(bins) #creates cumulative sum binning out of existing bins
+        cumulative=zeros(length(bins))
+        for i=1:length(bins)
+            cumulative[i]=sum(bins[1:i])
+        end
+        return cumulative
+    end
+
+    function getBestBinFit(bin1,bin2) #this function finds best match for bin2 to bin1 and returns stat value
+        testList=zeros(length(bin1))
+        reArrangement=bin2
+        sum1=cumulativeBins(bin1)
+        sum2=cumulativeBins(bin2)
+        arrangeList=[]
+        for i=1:length(bin1)
+            testList[i]=KSampleADTest(sum1,sum2).A²k #retrieve A²k stat -- higher is better -- from testing against both cumulative sum bin arrays
+            tempArr=zeros(length(reArrangement))
+            last=reArrangement[end]
+            tempArr[1]=last #shift last bin in first bin
+            tempArr[2:end]=reArrangement[1:(end-1)]
+            reArrangement=tempArr
+            sum2=cumulativeBins(reArrangement) #make new sum2 for testing on next loop
+            push!(arrangeList,reArrangement)
+        end
+        maxStat,ind=findmax(testList)
+        if maximum(testList)==minimum(testList)
+            println("no variance when shifting bins")
+        end
+        return maxStat,arrangeList[ind]
+    end
+
+    shift1=shiftBinsMid(maxInd1,half,delta1,bins1) #shit bins1 so peak is in middle
+    fitStat,shift2=getBestBinFit(shift1,bins2) #get best match to bins1 shift
     yerr1,yerr2=sqrt.(shift1),sqrt.(shift2)
     norm1,norm2=shift1./sum(shift1),shift2./sum(shift2)
     p=plot(norm1,label="$srcinfo1 COUNTS: $(sum(shift1))",ribbon=yerr1./sum(shift1),fillalpha=0.5)#yerr=yerr1./sum(shift1))
     p=plot!(norm2,label="$srcinfo2 COUNTS: $(sum(shift2))",ribbon=yerr2./sum(shift2),fillalpha=0.5)#yerr=yerr2./sum(shift2))
+
     function genAnnotations(binShift,left;kwargs...)
         annotations=[]
         if left==true #for some reason could not get this to work in kwargs...
@@ -175,18 +210,21 @@ function makeLCPair(indList1,indList2; binNum=11,srcinfo1="",srcinfo2="") #pick 
         end
         return annotations
     end
+
     a1,a2=genAnnotations(shift1,true;color=:blue),genAnnotations(shift2,false;color=:red)
     for i=1:length(a1)
         p=annotate!(a1[i][1],a1[i][2],a1[i][3]) #add annotations to data points
         p=annotate!(a2[i][1],a2[i][2],a2[i][3])
     end
+
     yMax1,yMax2=maximum(norm1),maximum(norm2)
     if yMax1>yMax2
         pMax=yMax1
     else
         pMax=yMax2
     end
-    p=plot!(title="Shifted and normalized LC pair",legend=:best,ylims=(0,pMax+0.08)) #manually set ylim so legend clears data
+
+    p=plot!(title="Shifted and normalized LC pair \nA²k fit parameter: $(fitStat)",legend=:best,ylims=(0,pMax+0.08)) #manually set ylim so legend clears data
     return p
 end
 
@@ -205,8 +243,7 @@ function genPairLC(; fileListPath="obsid_src_test.txt") #need to both shift and 
         T1,T2=srcT[i],srcT[i+1]
         srcinfoString1="OBSID: $(obsid1) SRC: $(srcNum1)"
         srcinfoString2="OBSID: $(obsid2) SRC: $(srcNum2)"
-        #filePath="pair$(i)_$(obsid1)_src_$(srcNum1)_w_$(obsid2)_src_$(srcNum2).times" #assume run from directory with files
-        file1="$(obsid1)_src_$(srcNum1).times"
+        file1="$(obsid1)_src_$(srcNum1).times" #assume run from directory with these files
         file2="$(obsid2)_src_$(srcNum2).times"
         data1,data2=readlines(file1),readlines(file2)
         times1,times2=getFloatTimes(data1),getFloatTimes(data2)
@@ -218,8 +255,8 @@ function genPairLC(; fileListPath="obsid_src_test.txt") #need to both shift and 
     end
 end
 
-genAllLC()
-genAllLC(normalized=true)
-genAllLC(shiftedVar=true)
-genAllLC(shiftedVar=true,normalized=true)
+#genAllLC()
+#genAllLC(normalized=true)
+#genAllLC(shiftedVar=true)
+#genAllLC(shiftedVar=true,normalized=true)
 genPairLC()
